@@ -1,0 +1,53 @@
+name: Security Pipeline
+
+# This workflow is reusable: other repos call it with
+#   jobs:
+#     security:
+#       uses: milobzb/security-pipeline/.github/workflows/security-scan.yml@main
+#
+# It also runs on pushes/PRs to this repo directly, so the pipeline continuously
+# tests and demonstrates itself.
+on:
+  workflow_call:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout calling repository
+        uses: actions/checkout@v4
+
+      - name: Checkout security-pipeline toolkit
+        uses: actions/checkout@v4
+        with:
+          repository: milobzb/security-pipeline
+          path: .security-pipeline
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Make pipeline scripts executable
+        run: chmod +x .security-pipeline/scripts/*.sh
+
+      - name: Run secret scan
+        run: .security-pipeline/scripts/scan-secrets.sh ./security-reports
+        continue-on-error: true
+
+      - name: Run dependency audit
+        run: .security-pipeline/scripts/scan-deps.sh ./security-reports
+        continue-on-error: true
+
+      - name: Aggregate results
+        run: .security-pipeline/scripts/aggregate-report.sh ./security-reports
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report
+          path: security-reports/
